@@ -2,7 +2,6 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import talib
 from typing import Dict, Tuple, List
 
 class DataProcessor:
@@ -10,7 +9,7 @@ class DataProcessor:
         self.technical_indicators = []
     
     def calculate_technical_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Tính các chỉ số kỹ thuật nâng cao"""
+        """Tính các chỉ số kỹ thuật nâng cao - KHÔNG DÙNG TA-LIB"""
         if df.empty:
             return df
             
@@ -24,35 +23,27 @@ class DataProcessor:
         for col in price_columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
         
-        # 1. MOVING AVERAGES
-        df['SMA_7'] = talib.SMA(df['close'], timeperiod=7)
-        df['SMA_25'] = talib.SMA(df['close'], timeperiod=25)
-        df['SMA_99'] = talib.SMA(df['close'], timeperiod=99)
-        df['EMA_12'] = talib.EMA(df['close'], timeperiod=12)
-        df['EMA_26'] = talib.EMA(df['close'], timeperiod=26)
+        # 1. MOVING AVERAGES (THAY THẾ TA-LIB)
+        df['SMA_7'] = df['close'].rolling(window=7).mean()
+        df['SMA_25'] = df['close'].rolling(window=25).mean()
+        df['SMA_99'] = df['close'].rolling(window=99).mean()
+        df['EMA_12'] = df['close'].ewm(span=12).mean()
+        df['EMA_26'] = df['close'].ewm(span=26).mean()
         
-        # 2. MOMENTUM INDICATORS
-        df['RSI'] = talib.RSI(df['close'], timeperiod=14)
-        df['RSI_7'] = talib.RSI(df['close'], timeperiod=7)
-        df['STOCH_K'], df['STOCH_D'] = talib.STOCH(df['high'], df['low'], df['close'])
-        df['WILLR'] = talib.WILLR(df['high'], df['low'], df['close'], timeperiod=14)
-        df['CCI'] = talib.CCI(df['high'], df['low'], df['close'], timeperiod=14)
+        # 2. MOMENTUM INDICATORS (THAY THẾ TA-LIB)
+        df['RSI'] = self.calculate_rsi(df['close'])
+        df['RSI_7'] = self.calculate_rsi(df['close'], period=7)
+        df['STOCH_K'], df['STOCH_D'] = self.calculate_stochastic(df)
         
-        # 3. VOLATILITY INDICATORS
-        df['ATR'] = talib.ATR(df['high'], df['low'], df['close'], timeperiod=14)
-        df['BB_upper'], df['BB_middle'], df['BB_lower'] = talib.BBANDS(
-            df['close'], timeperiod=20, nbdevup=2, nbdevdn=2, matype=0
-        )
+        # 3. VOLATILITY INDICATORS (THAY THẾ TA-LIB)
+        df['ATR'] = self.calculate_atr(df)
+        df['BB_upper'], df['BB_middle'], df['BB_lower'] = self.calculate_bollinger_bands(df['close'])
         
-        # 4. TREND INDICATORS
-        df['MACD'], df['MACD_signal'], df['MACD_hist'] = talib.MACD(df['close'])
-        df['ADX'] = talib.ADX(df['high'], df['low'], df['close'], timeperiod=14)
-        df['PLUS_DI'] = talib.PLUS_DI(df['high'], df['low'], df['close'], timeperiod=14)
-        df['MINUS_DI'] = talib.MINUS_DI(df['high'], df['low'], df['close'], timeperiod=14)
+        # 4. TREND INDICATORS (THAY THẾ TA-LIB)
+        df['MACD'], df['MACD_signal'], df['MACD_hist'] = self.calculate_macd(df['close'])
         
-        # 5. VOLUME INDICATORS
-        df['OBV'] = talib.OBV(df['close'], df['volume'])
-        df['AD'] = talib.AD(df['high'], df['low'], df['close'], df['volume'])
+        # 5. VOLUME INDICATORS (THAY THẾ TA-LIB)
+        df['OBV'] = self.calculate_obv(df)
         
         # 6. CUSTOM INDICATORS
         # Price changes và returns
@@ -113,6 +104,60 @@ class DataProcessor:
         
         print(f"✅ Đã tính {len(self.technical_indicators)} chỉ số kỹ thuật")
         return df
+
+    # CÁC HÀM THAY THẾ TA-LIB
+    def calculate_rsi(self, prices, period=14):
+        """Tính RSI indicator - Thay thế TA-LIB"""
+        delta = prices.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        return rsi
+
+    def calculate_macd(self, prices, fast=12, slow=26, signal=9):
+        """Tính MACD indicator - Thay thế TA-LIB"""
+        ema_fast = prices.ewm(span=fast).mean()
+        ema_slow = prices.ewm(span=slow).mean()
+        macd = ema_fast - ema_slow
+        macd_signal = macd.ewm(span=signal).mean()
+        macd_hist = macd - macd_signal
+        return macd, macd_signal, macd_hist
+
+    def calculate_bollinger_bands(self, prices, period=20, std_dev=2):
+        """Tính Bollinger Bands - Thay thế TA-LIB"""
+        sma = prices.rolling(window=period).mean()
+        std = prices.rolling(window=period).std()
+        upper_band = sma + (std * std_dev)
+        lower_band = sma - (std * std_dev)
+        middle_band = sma
+        return upper_band, middle_band, lower_band
+
+    def calculate_atr(self, df, period=14):
+        """Tính Average True Range - Thay thế TA-LIB"""
+        high_low = df['high'] - df['low']
+        high_close = np.abs(df['high'] - df['close'].shift())
+        low_close = np.abs(df['low'] - df['close'].shift())
+        
+        true_range = np.maximum(np.maximum(high_low, high_close), low_close)
+        atr = true_range.rolling(window=period).mean()
+        return atr
+
+    def calculate_stochastic(self, df, period=14, smooth_k=3, smooth_d=3):
+        """Tính Stochastic Oscillator - Thay thế TA-LIB"""
+        low_min = df['low'].rolling(window=period).min()
+        high_max = df['high'].rolling(window=period).max()
+        
+        stoch_k = 100 * (df['close'] - low_min) / (high_max - low_min)
+        stoch_k_smooth = stoch_k.rolling(window=smooth_k).mean()
+        stoch_d = stoch_k_smooth.rolling(window=smooth_d).mean()
+        
+        return stoch_k_smooth, stoch_d
+
+    def calculate_obv(self, df):
+        """Tính On Balance Volume - Thay thế TA-LIB"""
+        obv = (np.sign(df['close'].diff()) * df['volume']).fillna(0).cumsum()
+        return obv
     
     def _handle_missing_values(self, df: pd.DataFrame) -> pd.DataFrame:
         """Xử lý missing values với nhiều phương pháp"""
