@@ -1,3 +1,21 @@
+# Thêm ở đầu app.py
+import streamlit as st
+try:
+    import pandas as pd
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import plotly.express as px
+    HAS_FULL_DEPS = True
+except ImportError as e:
+    st.warning(f"⚠️ Thiếu package: {e}")
+    HAS_FULL_DEPS = False
+
+# Trong các phần code, thêm điều kiện kiểm tra
+if HAS_FULL_DEPS:
+    # Code đầy đủ tính năng
+    st.title("Ứng dụng Phân tích Dữ liệu Binance 💹")
+else:
+    st.info("🔧 Ứng dụng đang trong quá trình cài đặt dependencies...")
 # Thêm đoạn này ở đầu file app.py
 import streamlit as st
 import sys
