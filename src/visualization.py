@@ -6,8 +6,13 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.figure_factory as ff
 from wordcloud import WordCloud
-import folium
-from folium import plugins
+try:
+    import folium
+    from folium import plugins
+    HAS_FOLIUM = True
+except ImportError:
+    HAS_FOLIUM = False
+    print("⚠️ Folium not installed - map features disabled")
 import pandas as pd
 import numpy as np
 from datetime import datetime
